@@ -1,6 +1,2 @@
-(ns clj-enum.core)
-
-(defn -main
-  "I don't do a whole lot."
-  [& args]
-  (println "Hello, World!"))
+(ns clj-enum.core
+  (:use midje.sweet))
