@@ -1,6 +1,6 @@
 (defproject clj-enum "0.1.0-SNAPSHOT"
-  :description "FIXME: write description"
-  :url "http://example.com/FIXME"
-  :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
+  :description ""
+  :url "https://github.com/rapala/clj-enum"
+  :license {:name "ISC license"
+            :url "http://www.isc.org/software/license"}
   :dependencies [[org.clojure/clojure "1.4.0"]])
