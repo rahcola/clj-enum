@@ -1,82 +1,81 @@
 (ns clj-enum.iteratee
   (:use midje.sweet)
-  (:require [clj-enum.stream :as s]))
+  (:require [clj-enum.stream :as s])
+  (:require [clj-enum.monad :as m])
+  (:require [clj-enum.eithert :as et]))
 
-(defprotocol Iteratee
-  (done? [self])
-  (running? [self])
-  (broken? [self]))
+(defprotocol Step
+  (yield? [self])
+  (continue? [self]))
 
-(defrecord Yield [value leftover-chunk]
-  Iteratee
-  (done? [_] true)
-  (running? [_] false)
-  (broken? [_] false))
+(defrecord Yield [value chunk]
+  Step
+  (yield? [_] true)
+  (continue? [_] false))
 
 (facts "Yield"
-  (let [i (->Yield ...val... ...lc...)]
-    (fact "is done"
-      (done? i) => true)
-    (fact "is not running"
-      (running? i) => false)
-    (fact "is not broken"
-      (broken? i) => false)
+  (let [i (->Yield ...val... ...c...)]
+    (fact "is yield"
+      (yield? i) => true)
+    (fact "is not continue"
+      (continue? i) => false)
 
     (fact "has a value"
       (contains? i :value) => true
       (:value i) => ...val...)
-    (fact "has leftovers of a chunk"
-      (contains? i :leftover-chunk) => true
-      (:leftover-chunk i) => ...lc...)))
+    (fact "has a chunk"
+      (contains? i :chunk) => true
+      (:chunk i) => ...c...)))
 
-(deftype Continue [on-eof with-data]
-  Iteratee
-  (done? [_] false)
-  (running? [_] true)
-  (broken? [_] false)
+(defrecord Continue [k]
+  Step
+  (yield? [_] true)
+  (continue? [_] false)
   clojure.lang.Fn
   clojure.lang.IFn
-  (invoke [_ x]
-    (if (s/depleted? x)
-      on-eof
-      (with-data x)))
+  (invoke [_ arg]
+    (k arg))
   (applyTo [self args]
     (clojure.lang.AFn/applyToHelper self args)))
 
 (facts "Continue"
-  (let [i (->Continue ...e... identity)]
-    (fact "is not done"
-      (done? i) => false)
-    (fact "is running"
-      (running? i) => true)
-    (fact "is not broken"
-      (broken? i) => false)
+  (let [i (->Continue ...f...)]
+    (fact "is not yield"
+      (yield? i) => false)
+    (fact "is continue"
+      (continue? i) => true)
 
     (fact "is a function"
-      (fn? i) => true)
+      (fn? i) => true)))
 
-    (fact "returns on-eof when given eof"
-      (i s/eof) => ...e...)
-    (fact "continues with-data if given data"
-      (i ...data...) => ...data...
-      (provided
-        (s/depleted? ...data...) => false))))
+(defrecord Iteratee [run]
+  m/Monad
+  (return [_ x]
+    (Iteratee. (m/return run (Yield. data (s/chunk [])))))
+  (bind [_ f]
+    (Iteratee.
+     (m/bind run
+             (fn [step]
+               (if (continue? step)
+                 (m/return run (Continue. (fn [y] (m/bind (step y) f))))
+                 (let [r (:run (f (:value step)))
+                       chunk (:chunk step)]
+                   (if (empty? chunk)
+                     r
+                     (m/bind r (fn [step']
+                                 (if (continue? step')
+                                   (:run (step' chunk))
+                                   (m/return r (Yield. (:value step')
+                                                       chunk)))))))))))))
 
-(defrecord Break [message]
-  Iteratee
-  (done? [_] false)
-  (running? [_] false)
-  (broken? [_] true))
+(defn yield
+  ([data chunk]
+     (yield m/identity data chunk))
+  ([monad data chunk]
+     (Iteratee. (m/return (et/->Either monad) (Yield. data chunk)))))
 
-(facts "Break"
-  (let [i (->Break ...msg...)]
-    (fact "is not done"
-      (done? i) => false)
-    (fact "is not running"
-      (running? i) => false)
-    (fact "is broken"
-      (broken? i) => true)
-
-    (fact "has a message"
-      (contains? i :message) => true
-      (:message i) => ...msg...)))
+(defn continue
+  ([k]
+     (continue m/identity k))
+  ([monad k]
+     (Iteratee. (m/return (et/->Either monad) (Continue. k)))))

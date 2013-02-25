@@ -29,39 +29,36 @@
            :else iter))))
 
 (facts "eof"
-  (let [i (i/->Yield ...val... ...lc...)]
-    (fact "yields if iteratee yields"
-      (let [result (EOF i)]
-        result => i/done?
-        (fact "with the value of the iteratee"
-          (:value result) => ...val...)
-        (fact "with no leftovers of a chunk"
-          (:leftover-chunk result) => s/eof))))
+  (fact "yields if the iteratee yields"
+    (let [result (eof (i/->Yield ...val... ...lc...))]
+      result => i/done?
+      (fact "with the value of the iteratee"
+        (:value result) => ...val...)
+      (fact "with no leftovers of a chunk"
+        (:leftover-chunk result) => s/eof)))
 
-  (let [i (i/->Break ...msg...)]
-    (fact "breaks if the iteratee breaks"
-      (let [result (EOF i)]
-        result => i/broken?
-        (fact "with the message of the iteratee"
-          (:message result) => ...msg...))))
+  (fact "breaks if the iteratee breaks"
+    (let [result (eof (i/->Break ...msg...))]
+      result => i/broken?
+      (fact "with the message of the iteratee"
+        (:message result) => ...msg...)))
 
-  (let [i (i/->Continue (i/->Continue ...y... ...c...) ...f...)]
-    (fact "breaks if running iteratee continues with EOF"
-      (let [result (EOF i)]
-        result => i/broken?
+  (fact "breaks if a running iteratee continues after EOF"
+    (let [result (eof (i/->Continue (i/->Continue ...y... ...c...) ...f...))]
+      result => i/broken?
+      (fact "with a message"
         (:message result) => "diverging iteratee")))
 
-  (let [i (i/->Continue (i/->Yield ...val... s/eof) ...f...)]
-    (fact "yields if running iteratee yields with EOF"
-      (let [result (EOF i)]
-        result => i/done?
-        (fact "with the value of the iteratee"
-          (:value result) => ...val...)
-        (fact "with no leftovers of a chunk"
-          (:leftover-chunk result) => s/eof))))
+  (fact "yields if a running iteratee yields after EOF"
+    (let [result (eof (i/->Continue (i/->Yield ...val... ...lc...) ...f...))]
+      result => i/done?
+      (fact "with the value of the iteratee"
+        (:value result) => ...val...)
+      (fact "with no leftovers of a chunk"
+        (:leftover-chunk result) => s/eof)))
 
-  (let [i (i/->Continue (i/->Break ...msg...) ...f...)]
-    (fact "breaks if running iteratee breaks with EOF"
-      (let [result (EOF i)]
-        result => i/broken?
+  (fact "breaks if a running iteratee breaks after EOF"
+    (let [result (eof (i/->Continue (i/->Break ...msg...) ...f...))]
+      result => i/broken?
+      (fact "with the message of the iteratee"
         (:message result) => ...msg...))))

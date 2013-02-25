@@ -1,5 +1,6 @@
 (ns clj-enum.util
-  (:use midje.sweet))
+  (:use midje.sweet)
+  (:use clojure.algo.monads))
 
 (defn singleton? [xs]
   (and (not (empty? xs))

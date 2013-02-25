@@ -5,31 +5,28 @@
   (flowing? [self])
   (depleted? [self]))
 
-(defrecord Chunk [data]
+(defrecord AStream [tag data]
   Stream
-  (flowing? [_] true)
-  (depleted? [_] false))
+  (flowing? [_] (= tag :chunk))
+  (depleted? [_] (= tag :eof)))
+
+(defn chunk [data]
+  (AStream. :chunk data))
+
+(def eof (AStream. :eof nil))
 
 (facts "Chunk"
-  (let [s (->Chunk ...x...)]
+  (let [s (chunk ...x...)]
     (fact "is flowing"
       (flowing? s) => true)
     (fact "is not depleted"
       (depleted? s) => false)
 
     (fact "has data"
-      (contains? s :data) => true)))
-
-(deftype EOF []
-  Stream
-  (flowing? [_] false)
-  (depleted? [_] true))
-
-(def eof (->EOF))
+      (:data s) => ...x...)))
 
 (facts "EOF"
-  (let [s (->EOF)]
-    (fact "is not flowing"
-      (flowing? s) => false)
-    (fact "is depleted"
-      (depleted? s) => true)))
+  (fact "is not flowing"
+    (flowing? eof) => false)
+  (fact "is depleted"
+    (depleted? eof) => true))
