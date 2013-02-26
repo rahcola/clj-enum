@@ -5,12 +5,14 @@
 (defrecord EitherT [run]
   m/Monad
   (return [_ x]
-    (EitherT. (m/return run (e/right x))))
+    (EitherT.
+     (m/return run (e/right x))))
   (bind [_ f]
-    (m/bind run (fn [x]
-                  (if (e/right? x)
-                    (:run (f (:right x)))
-                    (m/return run x)))))
+    (EitherT.
+     (m/bind run (fn [x]
+                   (if (e/right? x)
+                     (:run (f (:right x)))
+                     (m/return run x))))))
   m/MonadError
   (throw-error [_ error]
     (EitherT. (m/return run (e/left error))))

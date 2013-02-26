@@ -8,9 +8,14 @@
   (throw-error [_ error])
   (catch-error [_ handler]))
 
-(deftype Identity []
+(extend-type Object
   Monad
   (return [_ x] x)
+  (bind [m f] (f m)))
+
+(defrecord Identity [x]
+  Monad
+  (return [_ y] (Identity. y))
   (bind [_ f] (f x)))
 
-(def identity (Identity.))
+(def identity-m (Identity. nil))

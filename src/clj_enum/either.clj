@@ -6,27 +6,31 @@
   (left? [self])
   (right? [self]))
 
-(defrecord Right [right]
-  Either
-  (left? [_] false)
-  (right? [_] true)
-  m/Monad
-  (return [_ x] (Right. x))
-  (bind [_ f] (f right))
-  m/MonadError
-  (throw-error [_ error] (Left. error))
-  (catch-error [self _] self))
-
 (defrecord Left [left]
   Either
   (left? [_] true)
   (right? [_] false)
-  m/Monad
-  (return [_ x] (Right. x))
-  (bind [self _] self)
   m/MonadError
   (throw-error [_ error] (Left. error))
   (catch-error [_ handler] (handler left)))
+
+(defrecord Right [right]
+  Either
+  (left? [_] false)
+  (right? [_] true)
+  m/MonadError
+  (throw-error [_ error] (Left. error))
+  (catch-error [self _] self))
+
+(extend-type Right
+  m/Monad
+  (return [_ x] (Right. x))
+  (bind [self f] (f (:right self))))
+
+(extend-type Left
+  m/Monad
+  (return [_ x] (Right. x))
+  (bind [self _] self))
 
 (defn right [x]
   (Right. x))
@@ -36,7 +40,7 @@
 
 (facts "Either"
   (fact "value in either monad is right"
-    (return (right nil) ...x...) => (right ...x...))
+    (m/return (right nil) ...x...) => (right ...x...))
   (fact "left then left is the first left"
     (m/bind (left ...x...) (fn [_] (left ...y...))) => (left ...x...))
   (fact "left then right is the first left"

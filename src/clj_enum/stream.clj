@@ -1,19 +1,25 @@
 (ns clj-enum.stream
+  (:refer-clojure :exclude [chunk])
   (:use midje.sweet))
 
 (defprotocol Stream
   (flowing? [self])
   (depleted? [self]))
 
-(defrecord AStream [tag data]
+(defrecord Chunk [data]
   Stream
-  (flowing? [_] (= tag :chunk))
-  (depleted? [_] (= tag :eof)))
+  (flowing? [_] true)
+  (depleted? [_] false))
+
+(deftype EOF []
+  Stream
+  (flowing? [_] false)
+  (depleted? [_] true))
 
 (defn chunk [data]
-  (AStream. :chunk data))
+  (Chunk. data))
 
-(def eof (AStream. :eof nil))
+(def eof (EOF.))
 
 (facts "Chunk"
   (let [s (chunk ...x...)]

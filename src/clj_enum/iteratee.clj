@@ -2,7 +2,8 @@
   (:use midje.sweet)
   (:require [clj-enum.stream :as s])
   (:require [clj-enum.monad :as m])
-  (:require [clj-enum.eithert :as et]))
+  (:require [clj-enum.eithert :as et])
+  (:require [clj-enum.functor :as f]))
 
 (defprotocol Step
   (yield? [self])
@@ -11,7 +12,10 @@
 (defrecord Yield [value chunk]
   Step
   (yield? [_] true)
-  (continue? [_] false))
+  (continue? [_] false)
+  f/Functor
+  (fmap [_ f]
+    (Yield. (f value) chunk)))
 
 (facts "Yield"
   (let [i (->Yield ...val... ...c...)]
@@ -29,8 +33,11 @@
 
 (defrecord Continue [k]
   Step
-  (yield? [_] true)
-  (continue? [_] false)
+  (yield? [_] false)
+  (continue? [_] true)
+  f/Functor
+  (fmap [_ f]
+    (Continue. (fn [x] (f/fmap (k x) f))))
   clojure.lang.Fn
   clojure.lang.IFn
   (invoke [_ arg]
@@ -49,9 +56,13 @@
       (fn? i) => true)))
 
 (defrecord Iteratee [run]
+  f/Functor
+  (fmap [_ f]
+    (Iteratee.
+     (m/bind run (fn [step] (m/return run (f/fmap step f))))))
   m/Monad
   (return [_ x]
-    (Iteratee. (m/return run (Yield. data (s/chunk [])))))
+    (Iteratee. (m/return run (Yield. x (s/chunk [])))))
   (bind [_ f]
     (Iteratee.
      (m/bind run
@@ -70,12 +81,12 @@
 
 (defn yield
   ([data chunk]
-     (yield m/identity data chunk))
+     (yield data data chunk))
   ([monad data chunk]
-     (Iteratee. (m/return (et/->Either monad) (Yield. data chunk)))))
+     (Iteratee. (m/return (et/->EitherT monad) (Yield. data chunk)))))
 
 (defn continue
   ([k]
-     (continue m/identity k))
+     (continue :identity k))
   ([monad k]
-     (Iteratee. (m/return (et/->Either monad) (Continue. k)))))
+     (Iteratee. (m/return (et/->EitherT monad) (Continue. k)))))
