@@ -1,18 +1,18 @@
 (ns clj-enum.iteratee
   (:use midje.sweet)
   (:require [clj-enum.stream :as s])
-  (:require [clj-enum.monad :as m])
-  (:require [clj-enum.eithert :as et])
   (:require [clj-enum.functor :as f]))
 
-(defprotocol Step
+(defprotocol Iteratee
   (yield? [self])
-  (continue? [self]))
+  (continue? [self])
+  (broken? [self]))
 
 (defrecord Yield [value chunk]
-  Step
+  Iteratee
   (yield? [_] true)
   (continue? [_] false)
+  (broken? [_] false)
   f/Functor
   (fmap [_ f]
     (Yield. (f value) chunk)))
@@ -23,6 +23,8 @@
       (yield? i) => true)
     (fact "is not continue"
       (continue? i) => false)
+    (fact "is not broken"
+      (broken? i) => false)
 
     (fact "has a value"
       (contains? i :value) => true
@@ -32,9 +34,10 @@
       (:chunk i) => ...c...)))
 
 (defrecord Continue [k]
-  Step
+  Iteratee
   (yield? [_] false)
   (continue? [_] true)
+  (broken? [_] false)
   f/Functor
   (fmap [_ f]
     (Continue. (fn [x] (f/fmap (k x) f))))
@@ -51,42 +54,63 @@
       (yield? i) => false)
     (fact "is continue"
       (continue? i) => true)
+    (fact "is not broken"
+      (broken? i) => false)
 
     (fact "is a function"
       (fn? i) => true)))
 
-(defrecord Iteratee [run]
+(defrecord Broken [error]
+  Iteratee
+  (yield? [_] false)
+  (continue? [_] false)
+  (broken? [_] true)
   f/Functor
-  (fmap [_ f]
-    (Iteratee.
-     (m/bind run (fn [step] (m/return run (f/fmap step f))))))
-  m/Monad
-  (return [_ x]
-    (Iteratee. (m/return run (Yield. x (s/chunk [])))))
-  (bind [_ f]
-    (Iteratee.
-     (m/bind run
-             (fn [step]
-               (if (continue? step)
-                 (m/return run (Continue. (fn [y] (m/bind (step y) f))))
-                 (let [r (:run (f (:value step)))
-                       chunk (:chunk step)]
-                   (if (empty? chunk)
-                     r
-                     (m/bind r (fn [step']
-                                 (if (continue? step')
-                                   (:run (step' chunk))
-                                   (m/return r (Yield. (:value step')
-                                                       chunk)))))))))))))
+  (fmap [self _] self))
 
-(defn yield
-  ([data chunk]
-     (yield data data chunk))
-  ([monad data chunk]
-     (Iteratee. (m/return (et/->EitherT monad) (Yield. data chunk)))))
+(facts "Broken"
+  (let [i (->Broken ...f...)]
+    (fact "is not yield"
+      (yield? i) => false)
+    (fact "is not continue"
+      (continue? i) => false)
+    (fact "is broken"
+      (broken? i) => true)))
 
-(defn continue
-  ([k]
-     (continue :identity k))
-  ([monad k]
-     (Iteratee. (m/return (et/->EitherT monad) (Continue. k)))))
+(def consume
+  (let [step (fn step [acc s]
+               (if (s/depleted? s)
+                 (->Yield acc s)
+                 (->Continue (partial step (concat acc (:data s))))))]
+    (->Continue (fn [s] (step [] s)))))
+
+(fact "consume"
+  (fact "is a continue"
+    (continue? consume) => true)
+  (fact "yields given an eof"
+    (let [result (consume s/eof)]
+      (yield? result) => true
+      (fact "with an empty sequence"
+        (:value result) => empty?)
+      (fact "with no chunks"
+        (:chunk result) => s/eof)))
+  (fact "continues given a flowing stream"
+    (continue? (consume (s/chunk [...x...]))) => true))
+
+;; (bind [_ f]
+;;     (Iteratee.
+;;      (m/bind run
+;;              (fn [step]
+;;                (if (continue? step)
+;;                  (m/return run (Continue. (fn [y] (m/bind (step y) f))))
+;;                  (let [chunk (:chunk step)
+;;                        r (:run (f (:value step)))]
+;;                    (if (and (s/flowing? chunk)
+;;                             (empty? (:data chunk)))
+;;                      r
+;;                      (m/bind r
+;;                              (fn [step']
+;;                                (if (continue? step')
+;;                                  (:run (step' chunk))
+;;                                  (m/return r (Yield. (:value step')
+;;                                                      chunk))))))))))))

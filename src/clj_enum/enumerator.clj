@@ -1,64 +1,79 @@
 (ns clj-enum.enumerator
   (:use midje.sweet)
-  (:require [clj-enum.iteratee :as i]
-            [clj-enum.stream :as s]))
+  (:require [clj-enum.iteratee :as i])
+  (:require [clj-enum.stream :as s]))
 
-(deftype Enumerator [f]
+(defprotocol Enumerator
+  (sequence-enumerators [first then]))
+
+(deftype AEnumerator [f]
+  Enumerator
+  (sequence-enumerators [_ then]
+    (AEnumerator.
+     (fn [iteratee]
+       (then (f iteratee)))))
   clojure.lang.Fn
   clojure.lang.IFn
-  (invoke [_ iter]
-    (f iter))
+  (invoke [_ iteratee]
+    (f iteratee))
   (applyTo [self args]
     (clojure.lang.AFn/applyToHelper self args)))
 
 (fact "Enumerator"
-  (let [e (->Enumerator ...f...)]
+  (let [e (->AEnumerator ...f...)]
     (fact "is a function"
       (fn? e) => true)))
 
 (def eof
-  (->Enumerator
-   (fn [iter]
-     (cond (i/running? iter)
-           (let [iter (iter s/eof)]
-             (if (i/running? iter)
-               (i/->Break "diverging iteratee")
-               (recur iter)))
-           (i/done? iter)
-           (i/->Yield (:value iter) s/eof)
-           :else iter))))
+  (->AEnumerator
+   (fn [iteratee]
+     (cond (i/continue? iteratee)
+           (let [iteratee' (iteratee s/eof)]
+             (if (i/continue? iteratee')
+               (i/->Broken "diverging iteratee")
+               (recur iteratee')))
+           (i/yield? iteratee)
+           (i/->Yield (:value iteratee) s/eof)
+           :else
+           iteratee))))
 
 (facts "eof"
-  (fact "yields if the iteratee yields"
+  (fact "yields if the iteratee is a continue that yields"
+    (let [result (eof (i/->Continue (fn [s] (i/->Yield ...val... ...lc...))))]
+      (i/yield? result) => true
+      (fact "with the value of the inner yield"
+        (:value result) => ...val...)
+      (fact "with no chunks"
+        (:chunk result) => s/eof)))
+  
+  (fact "brakes if the iteratee is a continue that does not yields"
+    (let [result (eof (i/->Continue (fn [s] (i/->Continue ...f...))))]
+      (i/broken? result) => true
+      (fact "with error \"diverging iteratee\""
+        (:error result) => "diverging iteratee")))
+  
+  (fact "yields if the iteratee is a yield"
     (let [result (eof (i/->Yield ...val... ...lc...))]
-      result => i/done?
+      (i/yield? result) => true
       (fact "with the value of the iteratee"
         (:value result) => ...val...)
-      (fact "with no leftovers of a chunk"
-        (:leftover-chunk result) => s/eof)))
+      (fact "with no chunks"
+        (:chunk result) => s/eof)))
 
-  (fact "breaks if the iteratee breaks"
-    (let [result (eof (i/->Break ...msg...))]
-      result => i/broken?
-      (fact "with the message of the iteratee"
-        (:message result) => ...msg...)))
+  (fact "brakes if the iteratee is broken"
+    (let [result (eof (i/->Broken ...error...))]
+      (i/broken? result) => true
+      (fact "with error of the iteratee"
+        (:error result) => ...error...))))
 
-  (fact "breaks if a running iteratee continues after EOF"
-    (let [result (eof (i/->Continue (i/->Continue ...y... ...c...) ...f...))]
-      result => i/broken?
-      (fact "with a message"
-        (:message result) => "diverging iteratee")))
+(defn enumerate-sequence [chunk-length sequence]
+  (->AEnumerator
+   (fn [iteratee]
+     (if (and (not (empty? sequence))
+              (i/continue? iteratee))
+       (let [[chunk rest] (split-at chunk-length sequence)]
+         ((enumerate-sequence chunk-length rest) (iteratee (s/chunk chunk))))
+       iteratee))))
 
-  (fact "yields if a running iteratee yields after EOF"
-    (let [result (eof (i/->Continue (i/->Yield ...val... ...lc...) ...f...))]
-      result => i/done?
-      (fact "with the value of the iteratee"
-        (:value result) => ...val...)
-      (fact "with no leftovers of a chunk"
-        (:leftover-chunk result) => s/eof)))
-
-  (fact "breaks if a running iteratee breaks after EOF"
-    (let [result (eof (i/->Continue (i/->Break ...msg...) ...f...))]
-      result => i/broken?
-      (fact "with the message of the iteratee"
-        (:message result) => ...msg...))))
+(defn >>> [first & rest]
+  (reduce sequence-enumerators first rest))
