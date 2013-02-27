@@ -26,15 +26,12 @@
 (def eof
   (->AEnumerator
    (fn [iteratee]
-     (cond (i/continue? iteratee)
-           (let [iteratee' (iteratee s/eof)]
-             (if (i/continue? iteratee')
-               (i/->Broken "diverging iteratee")
-               (recur iteratee')))
-           (i/yield? iteratee)
-           (i/->Yield (:value iteratee) s/eof)
-           :else
-           iteratee))))
+     (if (i/continue? iteratee)
+       (let [iteratee' (iteratee s/eof)]
+         (if (i/continue? iteratee')
+           (i/*handle-error* "diverging iteratee")
+           (recur iteratee')))
+       (i/->Yield (:value iteratee) s/eof)))))
 
 (facts "eof"
   (fact "yields given an iteratee that is a continue that yields"
@@ -45,12 +42,6 @@
       (fact "with no chunks"
         (:chunk result) => s/eof)))
   
-  (fact "brakes given an iteratee that is a continue that does not yield"
-    (let [result (eof (i/->Continue (fn [s] (i/->Continue .f.))))]
-      result => i/broken?
-      (fact "with an error \"diverging iteratee\""
-        (:error result) => "diverging iteratee")))
-  
   (fact "yields give an iteratee that is a yield"
     (let [result (eof (i/->Yield .value. .chunk.))]
       result => i/yield?
@@ -59,11 +50,10 @@
       (fact "with no chunks"
         (:chunk result) => s/eof)))
 
-  (fact "brakes given an iteratee that is broken"
-    (let [result (eof (i/->Broken .error.))]
-      result => i/broken?
-      (fact "with the error of the iteratee"
-        (:error result) => .error.))))
+  (fact "calls *handle-error* if iteratee does not yield given eof"
+    (binding [i/*handle-error* (fn [error] error)]
+      (let [result (eof (i/->Continue (fn [s] (i/->Continue .f.))))]
+        result => "diverging iteratee"))))
 
 (defn enumerate-sequence [chunk-length sequence]
   (->AEnumerator
@@ -103,3 +93,8 @@
 
 (defn >>> [first & rest]
   (reduce sequence-enumerators first rest))
+
+(defn run [iteratee]
+  (let [i (eof iteratee)]
+    (cond (i/yield? i) (:value i)
+          :else (i/*handle-error* "diverging iteratee"))))

@@ -2,16 +2,17 @@
   (:use midje.sweet)
   (:require [clj-enum.stream :as s]))
 
+(defn ^{:dynamic true} *handle-error* [error]
+  (throw (RuntimeException. error)))
+
 (defprotocol Iteratee
   (yield? [self])
-  (continue? [self])
-  (broken? [self]))
+  (continue? [self]))
 
 (defrecord Yield [value chunk]
   Iteratee
   (yield? [_] true)
-  (continue? [_] false)
-  (broken? [_] false))
+  (continue? [_] false))
 
 (facts "Yield"
   (let [i (->Yield ...val... ...c...)]
@@ -19,8 +20,6 @@
       i => yield?)
     (fact "is not continue"
       i =not=> continue?)
-    (fact "is not broken"
-      i =not=> broken?)
 
     (fact "has a value"
       (contains? i :value) => true
@@ -33,7 +32,6 @@
   Iteratee
   (yield? [_] false)
   (continue? [_] true)
-  (broken? [_] false)
   clojure.lang.Fn
   clojure.lang.IFn
   (invoke [_ arg]
@@ -47,26 +45,9 @@
       i =not=> yield?)
     (fact "is continue"
       i => continue?)
-    (fact "is not broken"
-      i =not=> broken?)
 
     (fact "is a function"
       i => fn?)))
-
-(defrecord Broken [error]
-  Iteratee
-  (yield? [_] false)
-  (continue? [_] false)
-  (broken? [_] true))
-
-(facts "Broken"
-  (let [i (->Broken ...f...)]
-    (fact "is not yield"
-      i =not=> yield?)
-    (fact "is not continue"
-      i =not=> continue?)
-    (fact "is broken"
-      i => broken?)))
 
 (def consume
   (let [step (fn step [acc s]
@@ -75,7 +56,7 @@
                  (->Continue (partial step (concat acc (:data s))))))]
     (->Continue (fn [s] (step [] s)))))
 
-(fact "consume"
+(facts "consume"
   (fact "is a continue"
     consume => continue?)
   (fact "yields given an eof"
