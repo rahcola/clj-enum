@@ -38,33 +38,33 @@
            iteratee))))
 
 (facts "eof"
-  (fact "yields if the iteratee is a continue that yields"
-    (let [result (eof (i/->Continue (fn [s] (i/->Yield ...val... ...lc...))))]
-      (i/yield? result) => true
+  (fact "yields given an iteratee that is a continue that yields"
+    (let [result (eof (i/->Continue (fn [s] (i/->Yield .value. .chunk.))))]
+      result => i/yield?
       (fact "with the value of the inner yield"
-        (:value result) => ...val...)
+        (:value result) => .value.)
       (fact "with no chunks"
         (:chunk result) => s/eof)))
   
-  (fact "brakes if the iteratee is a continue that does not yields"
-    (let [result (eof (i/->Continue (fn [s] (i/->Continue ...f...))))]
-      (i/broken? result) => true
-      (fact "with error \"diverging iteratee\""
+  (fact "brakes given an iteratee that is a continue that does not yield"
+    (let [result (eof (i/->Continue (fn [s] (i/->Continue .f.))))]
+      result => i/broken?
+      (fact "with an error \"diverging iteratee\""
         (:error result) => "diverging iteratee")))
   
-  (fact "yields if the iteratee is a yield"
-    (let [result (eof (i/->Yield ...val... ...lc...))]
-      (i/yield? result) => true
+  (fact "yields give an iteratee that is a yield"
+    (let [result (eof (i/->Yield .value. .chunk.))]
+      result => i/yield?
       (fact "with the value of the iteratee"
-        (:value result) => ...val...)
+        (:value result) => .value.)
       (fact "with no chunks"
         (:chunk result) => s/eof)))
 
-  (fact "brakes if the iteratee is broken"
-    (let [result (eof (i/->Broken ...error...))]
-      (i/broken? result) => true
-      (fact "with error of the iteratee"
-        (:error result) => ...error...))))
+  (fact "brakes given an iteratee that is broken"
+    (let [result (eof (i/->Broken .error.))]
+      result => i/broken?
+      (fact "with the error of the iteratee"
+        (:error result) => .error.))))
 
 (defn enumerate-sequence [chunk-length sequence]
   (->AEnumerator
@@ -74,6 +74,33 @@
        (let [[chunk rest] (split-at chunk-length sequence)]
          ((enumerate-sequence chunk-length rest) (iteratee (s/chunk chunk))))
        iteratee))))
+
+(fact "enumerate-sequence"
+  (fact "yields given an yield"
+    (let [result ((enumerate-sequence .n. .s.) (i/->Yield .value. .chunk.))]
+      result => i/yield?
+      (fact "with the value of the yield"
+        (:value result) => .value.)
+      (fact "with the chunk of the yield"
+        (:chunk result) => .chunk.)))
+
+  (fact "yields given a continue that yields"
+    (let [i (i/->Continue (fn [s] (i/->Yield .value. .chunk.)))
+          result ((enumerate-sequence 1 [.x.]) i)]
+      result => i/yield?
+      (fact "with the value of the yield"
+        (:value result) => .value.)
+      (fact "with the chunk of the yield"
+        (:chunk result) => .chunk.)))
+
+  (fact "returns with given iteratee if sequence is empty"
+    (let [result ((enumerate-sequence .n. []) .iteratee.)]
+      result => .iteratee.))
+
+  (fact "passes chunk-length elements of the sequence to a continue"
+    (let [i (i/->Continue (fn [s] (i/->Yield (:data s) .chunk.)))
+          result ((enumerate-sequence 3 [1 2 3 4 5]) i)]
+      (:value result) => [1 2 3])))
 
 (defn >>> [first & rest]
   (reduce sequence-enumerators first rest))
