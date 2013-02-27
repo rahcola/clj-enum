@@ -96,5 +96,6 @@
 
 (defn run [iteratee]
   (let [i (eof iteratee)]
-    (cond (i/yield? i) (:value i)
-          :else (i/*handle-error* "diverging iteratee"))))
+    (if (i/yield? i)
+      (:value i)
+      (i/*handle-error* "diverging iteratee"))))
