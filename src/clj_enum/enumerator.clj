@@ -19,10 +19,9 @@
   (applyTo [self args]
     (clojure.lang.AFn/applyToHelper self args)))
 
-(fact "Enumerator"
-  (let [e (->AEnumerator ...f...)]
-    (fact "is a function"
-      (fn? e) => true)))
+(facts "Enumerator"
+  (fact "is a function"
+    (->AEnumerator ...f...) => fn?))
 
 (def eof
   (->AEnumerator
@@ -75,7 +74,7 @@
          ((enumerate-sequence chunk-length rest) (iteratee (s/chunk chunk))))
        iteratee))))
 
-(fact "enumerate-sequence"
+(facts "enumerate-sequence"
   (fact "yields given an yield"
     (let [result ((enumerate-sequence .n. .s.) (i/->Yield .value. .chunk.))]
       result => i/yield?
